@@ -142,7 +142,9 @@ class UmiNorm {
 	void sort_jp_records();
 	void print_jp_records();
 	UmiNorm(cl_args l_args);
-	
+	~UmiNorm() {
+		jpr_sorter_vec.clear();
+	}	
 	stxxl::sorter<jp_record, jpr_Comparator, 1 * 1024 * 1024> jpr_sorter_vec;
 	std::map<std::string, int> umiCountMap;
 	std::vector<int> gap_vec;
@@ -165,7 +167,7 @@ UmiNorm::UmiNorm(cl_args l_args):
 	outfile_str(l_args.outfile_str),
 	cluster_file_str(l_args.cluster_file_str),
 	sorted_file_str(l_args.sorted_file_str),
-	jpr_sorter_vec(jpr_Comparator(), l_args.lmem_size * 1024 * 1024)
+	jpr_sorter_vec(jpr_Comparator(), (l_args.lmem_size/2) * 1024 * 1024)
 {}		
 
 
@@ -173,7 +175,7 @@ UmiNorm::UmiNorm(cl_args l_args):
 void cl_args::print_help() {
     std::cout << desc << "\n";
 	std::cout << "Usage: uminorm -i <infile>"
-			" -o <outfile> -a <all_out>\n\n";
+			" -o <outfile> -a <all_out> -s <sorted_out>\n\n";
 }
 
 bool cl_args::parse_args(int argc, char* argv[]) {
@@ -185,7 +187,7 @@ bool cl_args::parse_args(int argc, char* argv[]) {
 		("all_out,a", po::value<std::string>(&outfile_str), "Contains detailed sorted reads")
 		("sorted_out,s", po::value<std::string>(&sorted_file_str), "Contains sorted clusters")
 		("memory_size,m", po::value<int>(&lmem_size)->default_value(256), "Optional/Memory (RAM) in use in MB")
-		("gap_cluster,g", po::value<int>(&lgap_cluster)->default_value(500), "Optional/minium gap between two reads in an UMI cluster")
+		("gap_cluster,g", po::value<int>(&lgap_cluster)->default_value(500), "Optional/maximum gap between two same stranded consecutive reads in an UMI cluster")
     ;
 
     po::variables_map vm;
@@ -343,7 +345,7 @@ void UmiNorm::print_jp_records() {
 			&& (*jpr_sorter_vec).umi_str.compare(last_umi) == 0) {
 			int lgap = (*jpr_sorter_vec).start_c - last_start;
 			gap_vec.push_back(lgap);
-			if (lgap > 500) {
+			if (lgap > lgap_cluster) {
 				//outfile  << ">>>>> Lgap: " << lgap << "\n";
 				outfile  << ">>>>>\n";
 				last_delim = ">>>>>\n";
@@ -435,6 +437,8 @@ void UmiNorm::print_jp_records() {
 	outfile.close();
 	cluster_file.close();
 	sorted_file.close();
+
+	cluster_vec.clear();
 
 }
 

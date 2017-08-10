@@ -10,6 +10,8 @@
 class bam_reader {
     public:
 
+    bam_reader() = default;
+
     bam_reader(std::string& infile_str) {
         const char* format = NULL;
         if (has_suffix(infile_str, "sam")) {

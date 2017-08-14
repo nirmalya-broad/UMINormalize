@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <queue>
+#include <utility>
 
 #include "bam_reader.hpp"
 #include "bam_writer.hpp"
@@ -46,8 +47,9 @@ int main(int argc, char** argv) {
 
         while(!(ret_str = obj.read_record(next_rec)).empty()) {
             const int lsize = next_rec.get_size();
+            //std::cout << "lsize: " << lsize << " used_size: " << used_size << "\n";
             used_size += lsize;
-            brvec.push_back(next_rec);
+            brvec.push_back(std::move(next_rec));
             if (used_size > size_lim) {
                 temp_count++;
                 dump_sorted_records(brvec, outfile_str, temp_count, lhdr); 

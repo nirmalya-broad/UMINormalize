@@ -82,7 +82,7 @@ int main(int argc, char** argv) {
         bam_record lrec;
         reader_map[j].read_record(lrec);
         lrec.reader_index = j;
-        bam_pq.push(lrec);
+        bam_pq.push(std::move(lrec));
     } 
 
     std::cout << "Size of priority queue: " << bam_pq.size() << "\n";
@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
         if (!ret.empty()) {
             // transfer the reader_index
             lrec_new.reader_index = reader_index;
-            bam_pq.push(lrec_new);
+            bam_pq.push(std::move(lrec_new));
         }
     }
 

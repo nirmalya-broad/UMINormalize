@@ -14,58 +14,74 @@ namespace po = boost::program_options;
 #include "bam_writer.hpp"
 #include "bam_record.hpp"
 
+
+po::options_description desc;
+
+class args_c {
+    public:
+        std::string infile_str;
+        std::string outdir_str;
+        std::string prefix_str;
+        std::string coll_str;
+};
+
 class uminorm {
     private:
         std::string infile_str;
         std::string outfile_str;
-        std::string tempdir_str;
+        std::string outfile_all_str;
+        std::string outdir_str;
+        std::string logdir_str;
         std::string prefix_str;
         std::string coll_str;
-        po::options_description desc;
+        int total_split_count = 0;
+        bam_reader obj;
+        unsigned long size_lim = 100000000;
+        int brake_gap = 500;
         bam_hdr_t* lhdr = NULL;
     public:
-        std::string get_temp_file(std::string lstr, unsigned int count); 
-        void dump_sorted_records (std::vector<bam_record> brvec, std::string outfile_str,
+        uminorm(args_c args_o);
+        std::string get_temp_file(unsigned int count); 
+        void dump_sorted_records (std::vector<bam_record> brvec, 
             unsigned int temp_count, bam_hdr_t* lhdr);
         bool will_break_feature(bam_record first_rec, bam_record last_rec, bam_record this_rec);
         bool will_break_coordinate(bam_record first_rec, bam_record last_rec, bam_record this_rec);
         bool will_break(bam_record first_record, bam_record last_record, bam_record this_record, std::string coll_type);
         void write_collapse(std::vector<bam_record>& local_vec, std::ofstream& coll_writer);
-        int split_files();
-        void sort_and_merge_files(int split_count);
+        void split_n_sort_files();
+        void merge_files();
         void main_func();
         bool parse_args(int argc, char* argv[]);
         void print_help();
         std::string get_outfile_suffix_path(std::string suf);
         void initialize();
+        void clean();
         
 };
 
+uminorm::uminorm(args_c args_o)
+    : infile_str(args_o.infile_str),
+    outdir_str(args_o.outdir_str),
+    prefix_str(args_o.prefix_str),
+    coll_str(args_o.coll_str),
+    obj(infile_str) {}
+
 std::string uminorm::get_outfile_suffix_path(std::string suf) {
-    fs::path lpath(outfile_str);
-    std::string lfilename = lpath.filename();
-    std::regex reg("(\\.[s|b]am$)");
-    std::string new_name = std::regex_replace(lfilename, reg, suf);
-    std::string res = tempdir_str + "/" + new_name;
+    std::string res = logdir_str + "/" + prefix_str + suf;
     return res;
 
 }
 
-std::string uminorm::get_temp_file(std::string lstr, unsigned int count) {
+std::string uminorm::get_temp_file(unsigned int count) {
 
-    fs::path lpath(lstr);
-    std::string lfilename = lpath.filename();
-    std::regex reg("(\\.[s|b]am$)");
-    std::string lcount = std::to_string(count);
-    std::string new_name = std::regex_replace(lfilename, reg, "_temp_" + lcount + "$1");
-    std::string res = tempdir_str + "/" + new_name;
+    std::string res = logdir_str + "/" + prefix_str + "_" + std::to_string(count) + ".bam";
     return res;
 }
 
 void uminorm::dump_sorted_records (std::vector<bam_record> brvec, 
-        std::string outfile_str, unsigned int temp_count, bam_hdr_t* lhdr) {
+        unsigned int temp_count, bam_hdr_t* lhdr) {
     std::sort(brvec.begin(), brvec.end(), compare_bam_less());
-    std::string temp_str = get_temp_file(outfile_str, temp_count);
+    std::string temp_str = get_temp_file(temp_count);
     bam_writer writer(temp_str, lhdr);
     std::cout << "Dumping data to file: " << temp_str << "\n";
     std::cout << "Vector size: " << brvec.size() << "\n";
@@ -79,7 +95,6 @@ bool uminorm::will_break_feature(bam_record first_rec, bam_record last_rec, bam_
     // last_rec would be identical.
 
     // We should change this gap
-    int brake_gap = 500;
     if (last_rec.ref_name_id != this_rec.ref_name_id) {
         return true;
     } else if (0 != strcmp(last_rec.umi, this_rec.umi)) {
@@ -91,9 +106,7 @@ bool uminorm::will_break_feature(bam_record first_rec, bam_record last_rec, bam_
     } else {
         return false;
     }
-
 }
-
 
 bool uminorm::will_break_coordinate(bam_record first_rec, bam_record last_rec, bam_record this_rec) {
     if (last_rec.ref_name_id != this_rec.ref_name_id) {
@@ -107,7 +120,6 @@ bool uminorm::will_break_coordinate(bam_record first_rec, bam_record last_rec, b
     }
 } 
 
-
 bool uminorm::will_break(bam_record first_record, bam_record last_record, bam_record this_record, std::string coll_type) {
     if (coll_type.compare("feature")) {
         return will_break_feature(first_record, last_record, this_record);
@@ -118,7 +130,6 @@ bool uminorm::will_break(bam_record first_record, bam_record last_record, bam_re
         throw std::runtime_error(throw_msg);
     }
 }
-
 
 void uminorm::write_collapse(std::vector<bam_record>& local_vec, std::ofstream& coll_writer) {
     // Get the last record, specifically the name of the query
@@ -137,26 +148,34 @@ void uminorm::write_collapse(std::vector<bam_record>& local_vec, std::ofstream& 
         coll_writer << full_rec_str << "\n";
     }
     coll_writer << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n";
-
 }
 
-void initialize() {
-
-}
-int uminorm::split_files() {
-
-    unsigned long size_lim = 100000000;
-
-    bam_reader obj(infile_str);
-    lhdr = obj.get_sam_header_dup();
-
-    // if the tempdir does not exists, create it
-    fs::path tempdir_path(tempdir_str);
-    if (!fs::exists(tempdir_path)) {
-        fs::create_directories(tempdir_path);
+void uminorm::initialize() {
+    fs::path outdir_path(outdir_str);
+    if (!fs::exists(outdir_path)) {
+        fs::create_directories(outdir_path);
     }
 
-    unsigned int temp_count = 0;
+    lhdr = obj.get_sam_header();
+    // Outdir would be those place dedicated specifically for UMI
+    outfile_str = outdir_str + "/" + prefix_str + "_se.bam";
+    logdir_str = outdir_str + "/logdir";
+    
+    fs::path logdir_path (logdir_str);
+    if (!fs::exists(logdir_path)) {
+        fs::create_directories(logdir_path);
+    }
+}
+
+void uminorm::split_n_sort_files() {
+
+
+    // We duplicate the sam header to keep it alive after this function exits.
+    // ideally we have to have a copy constructor for bam_reader.
+
+    // if the outdir does not exists, create it
+
+    unsigned int split_count = 0;
     while(true) {
         std::string ret_str;
         std::vector<bam_record> brvec;
@@ -169,31 +188,31 @@ int uminorm::split_files() {
             used_size += lsize;
             brvec.push_back(std::move(next_rec));
             if (used_size > size_lim) {
-                temp_count++;
-                dump_sorted_records(brvec, outfile_str, temp_count, lhdr); 
+                split_count++;
+                dump_sorted_records(brvec, split_count, lhdr); 
                 break;
             }
         }
         
         if (ret_str.empty()) {
             if (used_size > 0) {
-                temp_count++;
-                dump_sorted_records(brvec, outfile_str, temp_count, lhdr);
+                split_count++;
+                dump_sorted_records(brvec, split_count, lhdr);
             }
             break;
         }
     }
+    total_split_count = split_count;
 
-    return temp_count;
 }
 
-void uminorm::sort_and_merge_files(int split_count) {
+void uminorm::merge_files() {
 
     std::map<unsigned int, bam_reader> reader_map;
     std::priority_queue<bam_record, std::vector<bam_record>, compare_bam_greater> bam_pq;
 
-    for (unsigned int j = 1; j <= split_count; j++) {
-        std::string temp_str = get_temp_file(outfile_str, j);
+    for (unsigned int j = 1; j <= total_split_count; j++) {
+        std::string temp_str = get_temp_file(j);
         std::cout << "Opening tempfile for reading: " << temp_str << "\n";
         //reader_map.emplace(j, temp_str);
         reader_map.emplace(j, temp_str);
@@ -213,10 +232,10 @@ void uminorm::sort_and_merge_files(int split_count) {
     //bam_hdr_t* lhdr = reader_map[1].get_sam_header();
     //std::set<unsigned int> empty_readers;
     std::string outfile_log_str = get_outfile_suffix_path("_log.txt");
-    std::string sorted_sam_str = get_outfile_suffix_path("_sorted.sam");
+    std::string sorted_bam_str = get_outfile_suffix_path("_sorted.bam");
     bam_writer writer(outfile_str, lhdr);
-    std::cout << "sorted_sam_str: " << sorted_sam_str << "\n";
-    bam_writer writer_sorted(sorted_sam_str, lhdr);
+    std::cout << "sorted_sam_str: " << sorted_bam_str << "\n";
+    bam_writer writer_sorted(sorted_bam_str, lhdr);
 
     bam_record first_record;
     bam_record last_record;   
@@ -224,10 +243,12 @@ void uminorm::sort_and_merge_files(int split_count) {
     std::ofstream outfile_log(outfile_log_str);
  
     bool fresh_start = true;
+    unsigned long lcount = 0;
     while(!bam_pq.empty()) {
         bam_record lrec = bam_pq.top();
         //std::cout << "full_rec: " << std::string(lrec.full_rec) << ", is_mapped: " << std::boolalpha << lrec.is_mapped << "\n";
         if (lrec.is_mapped) {
+            lcount++;
             if (fresh_start) {
                 // If this is the first record, please record all the information.
                 first_record = lrec;
@@ -248,8 +269,8 @@ void uminorm::sort_and_merge_files(int split_count) {
                     local_vec.push_back(lrec);
                 }
             }
+            writer_sorted.write_record(lrec.full_rec);
         }
-        writer_sorted.write_record(lrec.full_rec);
         unsigned int reader_index = lrec.reader_index;
         bam_pq.pop();
         // Write it to the outfile
@@ -263,28 +284,39 @@ void uminorm::sort_and_merge_files(int split_count) {
             bam_pq.push(std::move(lrec_new));
         }
     }
+    std::cout << "mapped_count: " << lcount << "\n";
+}
+
+void uminorm::clean() {
+    for (unsigned int j = 1; j <= total_split_count; j++) {
+        std::string temp_str = get_temp_file(j);
+        
+        fs::path temp_path(temp_str);
+        bool n = fs::remove(temp_path);
+        std::cout << "Deleted: " << temp_str << "\n";
+    }
 }
 
 void uminorm::main_func() {
-    int split_count = split_files();
-    sort_and_merge_files(split_count);
+    split_n_sort_files();
+    merge_files();
 }
 
-void uminorm::print_help() {
+void print_help() {
     std::cout << desc << "\n";
-    std::cout << "Usage: umi_norm -i <infile> -o <outfile> -t <tempdir> -c <collapse_type>"
+    std::cout << "Usage: umi_norm -i <infile> -o <outdir> -p <prefix> -c <collapse_type>"
     "\n\n";
 }
 
-bool uminorm::parse_args(int argc, char* argv[]) {
+bool parse_args(int argc, char* argv[], args_c& args_o) {
 
     bool all_set = true;
     desc.add_options()
         ("help,h", "produce help message")
-        ("infile,i", po::value<std::string>(&infile_str), "input sam/bam file.")
-        ("outfile,o", po::value<std::string>(&outfile_str), "output file.")
-        ("tempdir,t", po::value<std::string>(&tempdir_str), "temporary directory.")
-        ("collapse_type,c", po::value<std::string>(&coll_str), "type of collapse.")
+        ("infile,i", po::value<std::string>(&(args_o.infile_str)), "Input sam/bam file.")
+        ("prefix,p", po::value<std::string>(&(args_o.prefix_str)), "Prefix.")
+        ("outdir,o", po::value<std::string>(&(args_o.outdir_str)), "Output directory.")
+        ("collapse_type,c", po::value<std::string>(&(args_o.coll_str)), "Type of collapse.")
         ;
 
         po::variables_map vm;
@@ -297,28 +329,28 @@ bool uminorm::parse_args(int argc, char* argv[]) {
     }
 
     if (vm.count("infile")) {
-        std::cout << "Infile is set to: " << infile_str << "\n";
+        std::cout << "Infile is set to: " << args_o.infile_str << "\n";
     } else {
         all_set = false;
         std::cout << "Error: infile is not set.\n";
     }
 
-    if (vm.count("outfile")) {
-        std::cout << "Outfile is set to " << outfile_str << "\n";
+    if (vm.count("outdir")) {
+        std::cout << "Outdir is set to " << args_o.outdir_str << "\n";
     } else {
         all_set = false;
-        std::cout << "Error: outfile is not set.\n";
+        std::cout << "Error: outdir is not set.\n";
     }
 
-    if (vm.count("tempdir")) {
-        std::cout << "Tempdir is set to " << tempdir_str << "\n";
+    if (vm.count("prefix")) {
+        std::cout << "Prefix is set to " << args_o.prefix_str << "\n";
     } else {
         all_set = false;
-        std::cout << "Error: tempdir is not set.\n";
+        std::cout << "Error: prefix is not set.\n";
     }
 
     if (vm.count("collapse_type")) {
-        std::cout << "Collapse_type is set to " << coll_str << "\n";
+        std::cout << "Collapse_type is set to " << args_o.coll_str << "\n";
     } else {
         all_set = false;
         std::cout << "Error: Collapse_type is not set.\n";
@@ -329,11 +361,11 @@ bool uminorm::parse_args(int argc, char* argv[]) {
 }
 
 int main(int argc, char** argv) {
-
-    uminorm uno;
+    
+    args_c args_o;
     bool all_set = true;
     try {
-        all_set = uno.parse_args(argc, argv);
+        all_set = parse_args(argc, argv, args_o);
     } catch(std::exception& e) {
         std::cerr << "error: " << e.what() << "\n";
     } catch(...) {
@@ -341,12 +373,15 @@ int main(int argc, char** argv) {
     }
     
     if (!all_set) {
-        uno.print_help();
+        print_help();
         return 0;
     }
 
+    uminorm uno(args_o);
     try {
+        uno.initialize();
         uno.main_func();
+        uno.clean();
     } catch(const std::runtime_error& e) {
         std::cerr << "error: " << e.what() << "\n";
     }

@@ -37,6 +37,10 @@ class bam_reader {
     bam_hdr_t* get_sam_header() {
         return lhdr;
     }
+    
+    bam_hdr_t* get_sam_header_dup() {
+        return bam_hdr_dup(lhdr);
+    }
 
     char* get_refname(bam1_t* lread) {
         int32_t core_tid = (lread -> core).tid;
@@ -91,7 +95,7 @@ class bam_reader {
             // Get the other things
             char* next_record = bam_format1(lhdr, lread);
             uint16_t flag = (lread -> core).flag;
-            bool is_mapped = flag & BAM_FMUNMAP;
+            bool is_mapped = !(flag & BAM_FUNMAP);
             // Process the read and return
             // Get the query_name
             char* qname_src = bam_get_qname(lread);
@@ -112,8 +116,9 @@ class bam_reader {
                 throw std::runtime_error(err_str);
             }
 
-            // Get start_pos
-            unsigned long start_pos = (lread -> core).pos;
+            // Get start_pos; we added 1 to keep it in agreement with respect 
+            // to positions in the sam text file.
+            unsigned long start_pos = (lread -> core).pos + 1;
 
             // Get end_pos
             unsigned int q_len = (lread -> core).l_qseq;

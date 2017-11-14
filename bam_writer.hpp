@@ -24,7 +24,7 @@ class bam_writer {
         if (!(fp = sam_open(outfile_cstr, format))) {
             std::cout << "Error in opening sam file" << "\n";
         } else {
-            std::cout << "Successfully created the outfile" << "\n";
+            std::cout << "Successfully created the outfile: " << outfile_str << "\n";
         }
         /*
         if(!(lhdr = bam_hdr_init())) {

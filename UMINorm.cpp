@@ -23,6 +23,8 @@ class args_c {
         std::string outdir_str;
         std::string prefix_str;
         std::string coll_str;
+        bool parse_args(int argc, char* argv[]); 
+        void print_help();
 };
 
 class uminorm {
@@ -36,7 +38,7 @@ class uminorm {
         std::string coll_str;
         int total_split_count = 0;
         bam_reader obj;
-        unsigned long size_lim = 100000000;
+        unsigned long size_lim = 200000000;
         int brake_gap = 500;
         bam_hdr_t* lhdr = NULL;
     public:
@@ -183,14 +185,16 @@ void uminorm::split_n_sort_files() {
         bam_record next_rec;
 
         while(!(ret_str = obj.read_record(next_rec)).empty()) {
-            const int lsize = next_rec.get_size();
-            //std::cout << "lsize: " << lsize << " used_size: " << used_size << "\n";
-            used_size += lsize;
-            brvec.push_back(std::move(next_rec));
-            if (used_size > size_lim) {
-                split_count++;
-                dump_sorted_records(brvec, split_count, lhdr); 
-                break;
+            if (next_rec.is_mapped) {
+                const int lsize = next_rec.get_size();
+                //std::cout << "lsize: " << lsize << " used_size: " << used_size << "\n";
+                used_size += lsize;
+                brvec.push_back(std::move(next_rec));
+                if (used_size > size_lim) {
+                    split_count++;
+                    dump_sorted_records(brvec, split_count, lhdr); 
+                    break;
+                }
             }
         }
         
@@ -302,21 +306,21 @@ void uminorm::main_func() {
     merge_files();
 }
 
-void print_help() {
+void args_c::print_help() {
     std::cout << desc << "\n";
     std::cout << "Usage: umi_norm -i <infile> -o <outdir> -p <prefix> -c <collapse_type>"
     "\n\n";
 }
 
-bool parse_args(int argc, char* argv[], args_c& args_o) {
+bool args_c::parse_args(int argc, char* argv[]) {
 
     bool all_set = true;
     desc.add_options()
         ("help,h", "produce help message")
-        ("infile,i", po::value<std::string>(&(args_o.infile_str)), "Input sam/bam file.")
-        ("prefix,p", po::value<std::string>(&(args_o.prefix_str)), "Prefix.")
-        ("outdir,o", po::value<std::string>(&(args_o.outdir_str)), "Output directory.")
-        ("collapse_type,c", po::value<std::string>(&(args_o.coll_str)), "Type of collapse.")
+        ("infile,i", po::value<std::string>(&infile_str), "Input sam/bam file.")
+        ("prefix,p", po::value<std::string>(&prefix_str), "Prefix.")
+        ("outdir,o", po::value<std::string>(&outdir_str), "Output directory.")
+        ("collapse_type,c", po::value<std::string>(&coll_str), "Type of collapse.")
         ;
 
         po::variables_map vm;
@@ -329,28 +333,28 @@ bool parse_args(int argc, char* argv[], args_c& args_o) {
     }
 
     if (vm.count("infile")) {
-        std::cout << "Infile is set to: " << args_o.infile_str << "\n";
+        std::cout << "Infile is set to: " << infile_str << "\n";
     } else {
         all_set = false;
         std::cout << "Error: infile is not set.\n";
     }
 
     if (vm.count("outdir")) {
-        std::cout << "Outdir is set to " << args_o.outdir_str << "\n";
+        std::cout << "Outdir is set to " << outdir_str << "\n";
     } else {
         all_set = false;
         std::cout << "Error: outdir is not set.\n";
     }
 
     if (vm.count("prefix")) {
-        std::cout << "Prefix is set to " << args_o.prefix_str << "\n";
+        std::cout << "Prefix is set to " << prefix_str << "\n";
     } else {
         all_set = false;
         std::cout << "Error: prefix is not set.\n";
     }
 
     if (vm.count("collapse_type")) {
-        std::cout << "Collapse_type is set to " << args_o.coll_str << "\n";
+        std::cout << "Collapse_type is set to " << coll_str << "\n";
     } else {
         all_set = false;
         std::cout << "Error: Collapse_type is not set.\n";
@@ -365,7 +369,7 @@ int main(int argc, char** argv) {
     args_c args_o;
     bool all_set = true;
     try {
-        all_set = parse_args(argc, argv, args_o);
+        all_set = args_o.parse_args(argc, argv);
     } catch(std::exception& e) {
         std::cerr << "error: " << e.what() << "\n";
     } catch(...) {
@@ -373,7 +377,7 @@ int main(int argc, char** argv) {
     }
     
     if (!all_set) {
-        print_help();
+        args_o.print_help();
         return 0;
     }
 

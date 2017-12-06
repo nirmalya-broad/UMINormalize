@@ -4,6 +4,8 @@
 #include <vector>
 #include <queue>
 #include <utility>
+#include <chrono>
+#include <random>
 #include <experimental/filesystem>
 #include <boost/program_options.hpp>
 
@@ -13,8 +15,6 @@ namespace po = boost::program_options;
 #include "bam_reader.hpp"
 #include "bam_writer.hpp"
 #include "bam_record.hpp"
-
-
 
 class args_c {
     public:
@@ -41,15 +41,18 @@ class uminorm {
         unsigned long size_lim = 200000000;
         int brake_gap = 500;
         bam_hdr_t* lhdr = NULL;
+        unsigned seed = 100;
+        std::default_random_engine generator;
     public:
         uminorm(args_c args_o);
+        int get_rand_pos(int vec_size);
         std::string get_temp_file(unsigned int count); 
         void dump_sorted_records (std::vector<bam_record> brvec, 
             unsigned int temp_count, bam_hdr_t* lhdr);
         bool will_break_feature(bam_record first_rec, bam_record last_rec, bam_record this_rec);
         bool will_break_coordinate(bam_record first_rec, bam_record last_rec, bam_record this_rec);
         bool will_break(bam_record first_record, bam_record last_record, bam_record this_record, std::string coll_type);
-        void write_collapse(std::vector<bam_record>& local_vec, std::ofstream& coll_writer);
+        void write_collapse(std::vector<bam_record>& local_vec, std::ofstream& coll_writer, int final_pos);
         void split_n_sort_files();
         void merge_files();
         void main_func();
@@ -66,7 +69,8 @@ uminorm::uminorm(args_c args_o)
     outdir_str(args_o.outdir_str),
     prefix_str(args_o.prefix_str),
     coll_str(args_o.coll_str),
-    obj(infile_str) {}
+    obj(infile_str),
+    generator(seed) {}
 
 std::string uminorm::get_outfile_suffix_path(std::string suf) {
     std::string res = logdir_str + "/" + prefix_str + suf;
@@ -133,7 +137,7 @@ bool uminorm::will_break(bam_record first_record, bam_record last_record, bam_re
     }
 }
 
-void uminorm::write_collapse(std::vector<bam_record>& local_vec, std::ofstream& coll_writer) {
+void uminorm::write_collapse(std::vector<bam_record>& local_vec, std::ofstream& coll_writer, int final_pos) {
     // Get the last record, specifically the name of the query
 
     bam_record& last_rec = local_vec.back();
@@ -143,7 +147,7 @@ void uminorm::write_collapse(std::vector<bam_record>& local_vec, std::ofstream& 
     int totalReads = local_vec.size();
     int totalGap = endPos - startPos + 1;
     std::string strand_str(1, local_vec.front().strand);
-    coll_writer << "representative read: " << qname_str << " total_reads: " << totalReads << " gap: " << totalGap << " strand: " << strand_str << " start_pos: " << startPos << " end_pos: " << endPos << "\n";
+    coll_writer << "representative read: " << qname_str << " total_reads: " << totalReads << " gap: " << totalGap << " final_pos: " << final_pos << " strand: " << strand_str << " start_pos: " << startPos << " end_pos: " << endPos << "\n";
      coll_writer << "------------------------------------\n";
     for (auto& lrec : local_vec) {
         std::string full_rec_str(lrec.full_rec);
@@ -210,6 +214,17 @@ void uminorm::split_n_sort_files() {
 
 }
 
+int uminorm::get_rand_pos(int vec_size) {
+    if (vec_size == 1) {
+        return 0;
+    } else {
+        int vec_size_t = vec_size - 1;
+        std::uniform_int_distribution<int> distribution(0, vec_size_t);
+        return distribution(generator);
+        
+    }
+}
+
 void uminorm::merge_files() {
 
     std::map<unsigned int, bam_reader> reader_map;
@@ -265,8 +280,10 @@ void uminorm::merge_files() {
                     last_record = lrec;
                     local_vec.push_back(lrec);
                 } else {
-                    writer.write_record(last_record.full_rec);
-                    write_collapse(local_vec, outfile_log);
+                    int rand_pos = get_rand_pos(local_vec.size());
+                    bam_record final_rec = local_vec.at(rand_pos); 
+                    writer.write_record(final_rec.full_rec);
+                    write_collapse(local_vec, outfile_log, rand_pos);
                     local_vec.clear();
                     first_record = lrec;
                     last_record = lrec;

@@ -15,10 +15,10 @@ namespace po = boost::program_options;
 #include "bam_record.hpp"
 
 
-po::options_description desc;
 
 class args_c {
     public:
+        po::options_description desc;
         std::string infile_str;
         std::string outdir_str;
         std::string prefix_str;
@@ -160,7 +160,7 @@ void uminorm::initialize() {
 
     lhdr = obj.get_sam_header();
     // Outdir would be those place dedicated specifically for UMI
-    outfile_str = outdir_str + "/" + prefix_str + "_se.bam";
+    outfile_str = outdir_str + "/" + prefix_str + "_u.bam";
     logdir_str = outdir_str + "/logdir";
     
     fs::path logdir_path (logdir_str);

@@ -23,6 +23,7 @@ class args_c {
         std::string outdir_str;
         std::string prefix_str;
         std::string coll_str;
+        unsigned int size_lim_M;
         bool parse_args(int argc, char* argv[]); 
         void print_help();
 };
@@ -38,7 +39,8 @@ class uminorm {
         std::string coll_str;
         int total_split_count = 0;
         bam_reader obj;
-        unsigned long size_lim = 200000000;
+        unsigned int size_lim_M;
+        unsigned long size_lim;
         int brake_gap = 500;
         bam_hdr_t* lhdr = NULL;
         unsigned seed = 100;
@@ -52,7 +54,7 @@ class uminorm {
         bool will_break_feature(bam_record first_rec, bam_record last_rec, bam_record this_rec);
         bool will_break_coordinate(bam_record first_rec, bam_record last_rec, bam_record this_rec);
         bool will_break(bam_record first_record, bam_record last_record, bam_record this_record, std::string coll_type);
-        void write_collapse(std::vector<bam_record>& local_vec, std::ofstream& coll_writer, int final_pos);
+        void write_collapse(std::vector<bam_record>& local_vec, std::ofstream& coll_writer, std::ofstream& coll_len,  int final_pos);
         void split_n_sort_files();
         void merge_files();
         void main_func();
@@ -69,8 +71,11 @@ uminorm::uminorm(args_c args_o)
     outdir_str(args_o.outdir_str),
     prefix_str(args_o.prefix_str),
     coll_str(args_o.coll_str),
+    size_lim_M(args_o.size_lim_M),
     obj(infile_str),
-    generator(seed) {}
+    generator(seed) {
+        size_lim = size_lim_M * 1000000;    
+    }
 
 std::string uminorm::get_outfile_suffix_path(std::string suf) {
     std::string res = logdir_str + "/" + prefix_str + suf;
@@ -137,7 +142,7 @@ bool uminorm::will_break(bam_record first_record, bam_record last_record, bam_re
     }
 }
 
-void uminorm::write_collapse(std::vector<bam_record>& local_vec, std::ofstream& coll_writer, int final_pos) {
+void uminorm::write_collapse(std::vector<bam_record>& local_vec, std::ofstream& coll_writer, std::ofstream& coll_len, int final_pos) {
     // Get the last record, specifically the name of the query
 
     bam_record& last_rec = local_vec.back();
@@ -148,6 +153,7 @@ void uminorm::write_collapse(std::vector<bam_record>& local_vec, std::ofstream& 
     int totalGap = endPos - startPos + 1;
     std::string strand_str(1, local_vec.front().strand);
     coll_writer << "representative read: " << qname_str << " total_reads: " << totalReads << " gap: " << totalGap << " final_pos: " << final_pos << " strand: " << strand_str << " start_pos: " << startPos << " end_pos: " << endPos << "\n";
+    coll_len << totalReads << "\n";
      coll_writer << "------------------------------------\n";
     for (auto& lrec : local_vec) {
         std::string full_rec_str(lrec.full_rec);
@@ -181,6 +187,7 @@ void uminorm::split_n_sort_files() {
 
     // if the outdir does not exists, create it
 
+    unsigned long read_counter = 0;
     unsigned int split_count = 0;
     while(true) {
         std::string ret_str;
@@ -189,6 +196,11 @@ void uminorm::split_n_sort_files() {
         bam_record next_rec;
 
         while(!(ret_str = obj.read_record(next_rec)).empty()) {
+            read_counter++;
+            if (read_counter %100000 == 0) {
+                std::cout << "The value of read_counter: " << std::to_string(read_counter) << "\n";
+                std::cout << "ret_str: ---" << ret_str << "---\n";
+            }
             if (next_rec.is_mapped) {
                 const int lsize = next_rec.get_size();
                 //std::cout << "lsize: " << lsize << " used_size: " << used_size << "\n";
@@ -197,20 +209,23 @@ void uminorm::split_n_sort_files() {
                 if (used_size > size_lim) {
                     split_count++;
                     dump_sorted_records(brvec, split_count, lhdr); 
+                    std::cout << "split_count: " << std::to_string(split_count) << "\n";
                     break;
                 }
             }
         }
-        
+        std::cout << "Reached out of the while loop" << "\n"; 
         if (ret_str.empty()) {
             if (used_size > 0) {
                 split_count++;
                 dump_sorted_records(brvec, split_count, lhdr);
+                    std::cout << "split_count: " << std::to_string(split_count) << "\n";
             }
             break;
         }
     }
     total_split_count = split_count;
+    std::cout << "Reached end of split and sort" << "\n"; 
 
 }
 
@@ -252,6 +267,7 @@ void uminorm::merge_files() {
     //std::set<unsigned int> empty_readers;
     std::string outfile_log_str = get_outfile_suffix_path("_log.txt");
     std::string sorted_bam_str = get_outfile_suffix_path("_sorted.bam");
+    std::string coll_len_str = get_outfile_suffix_path("_coll_len.txt");
     bam_writer writer(outfile_str, lhdr);
     std::cout << "sorted_sam_str: " << sorted_bam_str << "\n";
     bam_writer writer_sorted(sorted_bam_str, lhdr);
@@ -260,6 +276,7 @@ void uminorm::merge_files() {
     bam_record last_record;   
     std::vector<bam_record> local_vec;
     std::ofstream outfile_log(outfile_log_str);
+    std::ofstream coll_len(coll_len_str);
  
     bool fresh_start = true;
     unsigned long lcount = 0;
@@ -283,7 +300,7 @@ void uminorm::merge_files() {
                     int rand_pos = get_rand_pos(local_vec.size());
                     bam_record final_rec = local_vec.at(rand_pos); 
                     writer.write_record(final_rec.full_rec);
-                    write_collapse(local_vec, outfile_log, rand_pos);
+                    write_collapse(local_vec, outfile_log, coll_len, rand_pos);
                     local_vec.clear();
                     first_record = lrec;
                     last_record = lrec;
@@ -338,6 +355,8 @@ bool args_c::parse_args(int argc, char* argv[]) {
         ("prefix,p", po::value<std::string>(&prefix_str), "Prefix.")
         ("outdir,o", po::value<std::string>(&outdir_str), "Output directory.")
         ("collapse_type,c", po::value<std::string>(&coll_str), "Type of collapse.")
+        ("size_lim_M,s", po::value(&size_lim_M)->default_value(200),
+            "Size of memory in megabyte")
         ;
 
         po::variables_map vm;
@@ -377,6 +396,7 @@ bool args_c::parse_args(int argc, char* argv[]) {
         std::cout << "Error: Collapse_type is not set.\n";
     }
 
+    std::cout << "size_lim_M is set to " << std::to_string(size_lim_M) << "\n";
     return all_set;
 
 }

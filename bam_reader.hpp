@@ -137,7 +137,7 @@ class bam_reader {
             std::string next_rec_str(next_record);
             bam_record bam_rec_temp(is_mapped, ref_name_id, umi_str, lstrand,
                 start_pos, end_pos, qname, next_record, reader_index); 
-            bam_rec = std::move(bam_rec_temp);
+            bam_rec = bam_rec_temp;
 
             delete[] umi_str;
             free(next_record);

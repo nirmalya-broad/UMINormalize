@@ -45,11 +45,12 @@ class bam_record {
     bam_record (bool _is_mapped, int _ref_name_id, char* _umi, char _strand,
             unsigned long _start_pos, unsigned long _end_pos, char* _qname, 
             char* _full_rec, int _reader_index) {
-         is_mapped = _is_mapped;
-         ref_name_id = _ref_name_id;
-         strand = _strand;
-         start_pos = _start_pos;
-         end_pos = _end_pos;
+        is_mapped = _is_mapped;
+        ref_name_id = _ref_name_id;
+        strand = _strand;
+        start_pos = _start_pos;
+        end_pos = _end_pos;
+        reader_index = _reader_index;
  
         size_t umi_len  = strlen(_umi) + 1;
         umi = new char[umi_len];
@@ -144,6 +145,7 @@ class bam_record {
         that.qname = nullptr;
         full_rec = that.full_rec;
         that.full_rec = nullptr;
+        return *this;
     }
 
 };

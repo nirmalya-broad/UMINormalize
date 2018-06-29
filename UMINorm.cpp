@@ -132,9 +132,9 @@ bool uminorm::will_break_feature(bam_record first_rec, bam_record last_rec, bam_
 } 
 
 bool uminorm::will_break(bam_record first_record, bam_record last_record, bam_record this_record, std::string coll_type) {
-    if (coll_type.compare("feature")) {
+    if (0 == coll_type.compare("feature")) {
         return will_break_feature(first_record, last_record, this_record);
-    } else if (coll_type.compare("coordinate")) {
+    } else if (0 == coll_type.compare("coordinate")) {
         return will_break_coordinate(first_record, last_record, this_record);
     } else {
         std::string throw_msg = "Illegal umi brake option: " + coll_type;

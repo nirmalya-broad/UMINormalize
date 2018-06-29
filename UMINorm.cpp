@@ -101,7 +101,7 @@ void uminorm::dump_sorted_records (std::vector<bam_record> brvec,
     }
 }
 
-bool uminorm::will_break_feature(bam_record first_rec, bam_record last_rec, bam_record this_rec) {
+bool uminorm::will_break_coordinate(bam_record first_rec, bam_record last_rec, bam_record this_rec) {
     // Compare between last_rec and this_rec; in some cases first rec and
     // last_rec would be identical.
 
@@ -119,7 +119,7 @@ bool uminorm::will_break_feature(bam_record first_rec, bam_record last_rec, bam_
     }
 }
 
-bool uminorm::will_break_coordinate(bam_record first_rec, bam_record last_rec, bam_record this_rec) {
+bool uminorm::will_break_feature(bam_record first_rec, bam_record last_rec, bam_record this_rec) {
     if (last_rec.ref_name_id != this_rec.ref_name_id) {
         return true;
     } else if (0 != strcmp(last_rec.umi, this_rec.umi)) {
@@ -321,6 +321,17 @@ void uminorm::merge_files() {
             lrec_new.reader_index = reader_index;
             bam_pq.push(std::move(lrec_new));
         }
+    }
+
+    // Check if local_vec has something; if yes push the last read
+    if (!local_vec.empty()) {
+        // This works as the last break point
+        int rand_pos = get_rand_pos(local_vec.size());
+        bam_record final_rec = local_vec.at(rand_pos);
+        writer.write_record(final_rec.full_rec);
+        write_collapse(local_vec, outfile_log, coll_len, rand_pos);
+        local_vec.clear();
+
     }
     std::cout << "mapped_count: " << lcount << "\n";
 }

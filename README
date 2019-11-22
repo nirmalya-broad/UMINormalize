@@ -4,7 +4,7 @@ After compiling the way to run UMINormalize is
 
 umi_norm -i <infile> -o <outdir> -p <prefix> -c <collapse_type>
 
-where 
+where, 
 
 infile contains the input sam/bam file containing aligned reads.
 outdir points to the path of the output directory.

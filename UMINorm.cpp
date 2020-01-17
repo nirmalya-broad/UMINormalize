@@ -16,6 +16,7 @@ namespace po = boost::program_options;
 #include "bam_reader.hpp"
 #include "bam_writer.hpp"
 #include "bam_record.hpp"
+#include "bed_writer.hpp"
 
 class args_c {
     public:
@@ -33,6 +34,7 @@ class uminorm {
     private:
         std::string infile_str;
         std::string outfile_str;
+        std::string bedfile_str;
         std::string outfile_all_str;
         std::string outdir_str;
         std::string logdir_str;
@@ -64,7 +66,9 @@ class uminorm {
         std::string get_outfile_suffix_path(std::string suf);
         void initialize();
         void clean();
-        
+        std::string get_bed_str(std::vector<bam_record> local_vec);
+        void throw_ineq_exception(std::string first_str, std::string sec_str);
+        void throw_neg_execption(long lvar);
 };
 
 uminorm::uminorm(args_c args_o)
@@ -172,6 +176,7 @@ void uminorm::initialize() {
     lhdr = obj.get_sam_header();
     // Outdir would be those place dedicated specifically for UMI
     outfile_str = outdir_str + "/" + prefix_str + "_u.bam";
+    bedfile_str = outdir_str + "/" + prefix_str + ".bed";
     logdir_str = outdir_str + "/logdir";
     
     fs::path logdir_path (logdir_str);
@@ -270,6 +275,9 @@ void uminorm::merge_files() {
     std::string sorted_bam_str = get_outfile_suffix_path("_sorted.bam");
     std::string coll_len_str = get_outfile_suffix_path("_coll_len.txt");
     bam_writer writer(outfile_str, lhdr);
+
+    bed_writer bwriter(bedfile_str);
+
     std::cout << "sorted_sam_str: " << sorted_bam_str << "\n";
     bam_writer writer_sorted(sorted_bam_str, lhdr);
 
@@ -298,6 +306,11 @@ void uminorm::merge_files() {
                     last_record = lrec;
                     local_vec.push_back(lrec);
                 } else {
+                    // Write bed information for the umi chain
+                    // Get the corresponding bed information
+                    std::string bed_str = get_bed_str(local_vec);
+                    bwriter.write_record_str(bed_str);
+
                     int rand_pos = get_rand_pos(local_vec.size());
                     bam_record final_rec = local_vec.at(rand_pos); 
                     writer.write_record(final_rec.full_rec);
@@ -326,6 +339,11 @@ void uminorm::merge_files() {
 
     // Check if local_vec has something; if yes push the last read
     if (!local_vec.empty()) {
+        
+        // Get the corresponding bed information
+        std::string bed_str = get_bed_str(local_vec);
+        bwriter.write_record_str(bed_str);
+
         // This works as the last break point
         int rand_pos = get_rand_pos(local_vec.size());
         bam_record final_rec = local_vec.at(rand_pos);
@@ -335,6 +353,72 @@ void uminorm::merge_files() {
 
     }
     std::cout << "mapped_count: " << lcount << "\n";
+}
+
+// This would take the first and the last bam record from local_vec. We
+// assume that they represent the two ends of a isolated UMI chain.
+
+void uminorm::throw_ineq_exception(std::string first_str, std::string sec_str) {
+
+    if (first_str != sec_str) {
+        std::string throw_msg = "First and second strings are not equal. \
+            First string: " + first_str + ", sec_str: " + sec_str;
+        throw std::runtime_error(throw_msg);
+    }
+}
+
+void uminorm::throw_neg_execption(long lvar) {
+
+    if (lvar < 0) {
+        std::string throw_msg = "Unexpected negative value. Value: " + \
+            std::to_string(lvar);
+        throw std::runtime_error(throw_msg);
+    }
+}
+
+std::string uminorm::get_bed_str(std::vector<bam_record> local_vec) {
+    bam_record& first_rec = local_vec.front();
+    bam_record& last_rec = local_vec.back();
+
+    char first_strand = first_rec.strand;
+    char last_strand = last_rec.strand;
+    std::string first_strand_s(1, first_strand);
+    std::string last_strand_s(1, last_strand);
+    throw_ineq_exception(first_strand_s, last_strand_s);
+
+    std::string first_umi_s(first_rec.umi);
+    std::string last_umi_s(last_rec.umi);
+    throw_ineq_exception(first_umi_s, last_umi_s);
+
+    unsigned long startPos = first_rec.start_pos;
+    unsigned long endPos = last_rec.end_pos;
+    long totalGap = endPos - startPos + 1;
+    throw_neg_execption(totalGap);
+    std::string startPos_s = std::to_string(startPos);
+    std::string endPos_s = std::to_string(endPos);
+
+    // We need strand, stratPos, endPos and umi string to create a bed record.
+    int first_ref_name_id = first_rec.ref_name_id;
+    int last_ref_name_id = last_rec.ref_name_id;
+
+    std::string first_ref_name_s = std::to_string(first_ref_name_id);
+    std::string last_ref_name_s = std::to_string(last_ref_name_id);
+
+    throw_ineq_exception(first_ref_name_s, last_ref_name_s);    
+    
+    std::string lname = first_umi_s + "_" + startPos_s + "_" + endPos_s +\
+        "_" + std::to_string(totalGap);
+    int lscore = 0;
+    std::string lscore_s = std::to_string(lscore);
+    std::string lref_s = "chr" + first_ref_name_s;
+    std::string bed_str = lref_s + "\t" + 
+        startPos_s + "\t" + 
+        endPos_s + "\t" + 
+        lname + "\t" + 
+        lscore_s + "\t" +
+        first_strand;
+        
+    return (bed_str);
 }
 
 void uminorm::clean() {

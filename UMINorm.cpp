@@ -404,13 +404,16 @@ std::string uminorm::get_bed_str(std::vector<bam_record> local_vec) {
     std::string first_ref_name_s = std::to_string(first_ref_name_id);
     std::string last_ref_name_s = std::to_string(last_ref_name_id);
 
-    throw_ineq_exception(first_ref_name_s, last_ref_name_s);    
+    throw_ineq_exception(first_ref_name_s, last_ref_name_s);   
+
+    // We shall have to get the tid of one of the two alignments
+    const char* refarr = sam_hdr_tid2name(lhdr, first_ref_name_id);
+    std::string lref_s(refarr); 
     
     std::string lname = first_umi_s + "_" + startPos_s + "_" + endPos_s +\
         "_" + std::to_string(totalGap);
     int lscore = 0;
     std::string lscore_s = std::to_string(lscore);
-    std::string lref_s = "chr" + first_ref_name_s;
     std::string bed_str = lref_s + "\t" + 
         startPos_s + "\t" + 
         endPos_s + "\t" + 

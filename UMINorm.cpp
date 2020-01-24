@@ -35,6 +35,7 @@ class uminorm {
         std::string infile_str;
         std::string outfile_str;
         std::string bedfile_str;
+        std::string gapfile_str;
         std::string outfile_all_str;
         std::string outdir_str;
         std::string logdir_str;
@@ -69,6 +70,13 @@ class uminorm {
         std::string get_bed_str(std::vector<bam_record> local_vec);
         void throw_ineq_exception(std::string first_str, std::string sec_str);
         void throw_neg_execption(long lvar);
+
+        std::string get_gap_str(const bam_record& first_rec, 
+            const bam_record& last_rec);
+
+        bool will_write_gap_coordinate(bam_record last_rec, 
+            bam_record this_rec);
+
 };
 
 uminorm::uminorm(args_c args_o)
@@ -121,6 +129,22 @@ bool uminorm::will_break_coordinate(bam_record first_rec, bam_record last_rec, b
         return true;
     } else {
         return false;
+    }
+}
+
+bool uminorm::will_write_gap_coordinate(bam_record last_rec, bam_record this_rec) {
+    // Compare between last_rec and this_rec; in some cases first rec and
+    // last_rec would be identical.
+
+    // We should change this gap
+    if (last_rec.ref_name_id != this_rec.ref_name_id) {
+        return false;
+    } else if (0 != strcmp(last_rec.umi, this_rec.umi)) {
+        return false;
+    } else if (last_rec.strand != this_rec.strand) {
+        return false;
+    } else {
+        return true;
     }
 }
 
@@ -177,6 +201,7 @@ void uminorm::initialize() {
     // Outdir would be those place dedicated specifically for UMI
     outfile_str = outdir_str + "/" + prefix_str + "_u.bam";
     bedfile_str = outdir_str + "/" + prefix_str + ".bed";
+    gapfile_str = outdir_str + "/" + prefix_str + "_gap.txt";
     logdir_str = outdir_str + "/logdir";
     
     fs::path logdir_path (logdir_str);
@@ -246,6 +271,7 @@ int uminorm::get_rand_pos(int vec_size) {
     }
 }
 
+
 void uminorm::merge_files() {
 
     std::map<unsigned int, bam_reader> reader_map;
@@ -278,6 +304,8 @@ void uminorm::merge_files() {
 
     bed_writer bwriter(bedfile_str);
 
+    std::ofstream gwriter(gapfile_str);
+
     std::cout << "sorted_sam_str: " << sorted_bam_str << "\n";
     bam_writer writer_sorted(sorted_bam_str, lhdr);
 
@@ -301,7 +329,20 @@ void uminorm::merge_files() {
                 fresh_start = false;
                 local_vec.push_back(lrec);
             } else {
-                bool break_status = will_break(first_record, last_record, lrec, coll_str);
+
+                // Get the gap between lrec and last_record
+                // Get the starting position between lrec and last_record
+                // Here last_record is actually the first record which is 
+                // on the left side on the coordinate and lrec is the 
+                // second record which is on the right side of the coordinate.
+
+                if (will_write_gap_coordinate(last_record, lrec)) {
+                    std::string gap_str = get_gap_str(last_record, lrec);
+                    gwriter << gap_str << "\n";
+                }
+                
+                bool break_status = will_break(first_record, last_record, \
+                    lrec, coll_str);
                 if (!break_status) {
                     last_record = lrec;
                     local_vec.push_back(lrec);
@@ -422,6 +463,51 @@ std::string uminorm::get_bed_str(std::vector<bam_record> local_vec) {
         first_strand;
         
     return (bed_str);
+}
+
+std::string uminorm::get_gap_str(const bam_record& first_rec, 
+    const bam_record& last_rec) {
+
+    // Check that refname, strand and UMI for next_rec and first_rec are 
+    char first_strand = first_rec.strand;
+    char last_strand = last_rec.strand;
+    std::string first_strand_s(1, first_strand);
+    std::string last_strand_s(1, last_strand);
+    throw_ineq_exception(first_strand_s, last_strand_s);
+
+    std::string first_umi_s(first_rec.umi);
+    std::string last_umi_s(last_rec.umi);
+    throw_ineq_exception(first_umi_s, last_umi_s);
+
+    int first_ref_name_id = first_rec.ref_name_id;
+    int last_ref_name_id = last_rec.ref_name_id;
+
+    std::string first_ref_name_s = std::to_string(first_ref_name_id);
+    std::string last_ref_name_s = std::to_string(last_ref_name_id);
+
+    throw_ineq_exception(first_ref_name_s, last_ref_name_s);   
+
+    // We shall have to get the tid of one of the two alignments
+    const char* refarr = sam_hdr_tid2name(lhdr, first_ref_name_id);
+    std::string lref_s(refarr); 
+    
+    unsigned long first_start_pos = first_rec.start_pos;
+    unsigned long last_start_pos = last_rec.start_pos;
+    std::string first_start_pos_s = std::to_string(first_start_pos);
+    std::string last_start_pos_s = std::to_string(last_start_pos);
+
+    long gap_two_recs = last_start_pos - first_start_pos;
+    throw_neg_execption(gap_two_recs);
+    std::string gap_two_recs_str = std::to_string(gap_two_recs);
+
+    std::string gap_str = first_umi_s + "\t" +
+        first_strand_s + "\t" +
+        gap_two_recs_str + "\t" +
+        first_ref_name_s + "\t" +
+        first_start_pos_s + "\t" +
+        last_start_pos_s;
+
+    return (gap_str);
 }
 
 void uminorm::clean() {

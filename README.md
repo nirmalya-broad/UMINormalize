@@ -25,5 +25,9 @@ where,
 <b>prefix</b> is a string used as a prefix of output files.<br>
 <b>collapse_type</b> is used to specify if the umi collapse is based on coordinates (for bacterial reads) or feature boundaries (used for eukaryotic host reads).
 
+## Cite the code
+Betin, V., Penaranda, C., Bandyopadhyay, N. et al. Hybridization-based capture of pathogen mRNA enables paired host-pathogen transcriptional analysis. Sci Rep 9, 19244 (2019). https://doi.org/10.1038/s41598-019-55633-6
+
+
 
  

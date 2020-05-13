@@ -13,7 +13,7 @@ Within each UMI, we assume that reads from each transcript are densely distribut
 We also have an implementation of UMI normalization for eukaryotes that mostly follow published algorithms.
 
 ## Implementation
-Our algorithm uses a specialized <b>out of memory k-way merge sort</b> in the order of (1) UMI barcode,  (2) strand specificity of the alignments. and finally (3) coordinates of the aligned reads (mainly bacterial reads), boundary of the features/genes (mainly for eukaryotic host reads).
+Our algorithm uses a specialized <b>out of memory k-way merge sort</b> in the order of (1) UMI barcode,  (2) strand specificity of the alignments and finally (3) coordinates of the aligned reads (mainly bacterial reads), boundary of the features/genes (mainly for eukaryotic host reads).
 
 After sorting is done, UMINormalize algorithm segments and collapses the reads based on a heuristic (the gap between the cluster described earlier in the <b>Algorithm</b> section) to obtain reads of mRNA transcripts without any PCR duplicates. <b>Out of memory sort</b> implemented in C++ allows processing of unlimited number of reads.
 

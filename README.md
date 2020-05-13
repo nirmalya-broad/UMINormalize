@@ -17,6 +17,9 @@ Our algorithm uses a specialized <b>out of memory k-way merge sort</b> in the or
 
 After sorting is done, UMINormalize algorithm segments and collapses the reads based on a heuristic (the gap between the cluster described earlier in the <b>Algorithm</b> section) to obtain reads of mRNA transcripts without any PCR duplicates. <b>Out of memory sort</b> implemented in C++ allows processing of unlimited number of reads.
 
+## Statistical modeling
+In this version of the project we segment the reads based on a fix gap (500 bases). However, in another project we developed a statistical model of the gaps based on a mixture of distributions. That part of the project is still in progress. But for concept and code please see the [NB_EM](https://github.com/nirmalya-broad/NB_EM) repository.
+
 ## Running UMINormalize
 After compiling the way to run UMINormalize is
 ```

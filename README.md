@@ -3,7 +3,7 @@
 ## Objective
 Dual transcriptional profiling of host and bacteria during infection is challenging due to the low abundance of bacterial mRNA. We report Pathogen Hybrid Capture (PatH-Cap), a method to enrich for bacterial mRNA and deplete bacterial rRNA simultaneously from dual RNA-seq libraries using transcriptome-specific probes. 
 
-PatH-Cap generates host and pathogen reads using the [scDual-Seq](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-017-1340-x) protocol. To circumvent the problem of duplicate reads due to PCR amplifcation, the library preparation step uses <b>U</b>nique <b>M</b>olecular <b>I</b>dentifier (<b>UMI</b>). 
+PatH-Cap generates host and pathogen reads using the [scDual-Seq](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-017-1340-x) protocol. To circumvent the problem of duplicate reads due to PCR amplification, the library preparation step uses <b>U</b>nique <b>M</b>olecular <b>I</b>dentifier (<b>UMI</b>). 
 
 The existing methods for UMI normalization (or UMI collapse) are applicable to reads from eukaryotes and not from prokaryotes. However, due to the presence of operons the transcripts from bacteria can span multiple-gene boundary. Hence, the existing UMI methods for eukaryotes are not able to estimate the transcript count from scDual-Seq accurately. 
 
